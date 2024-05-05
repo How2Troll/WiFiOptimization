@@ -33,6 +33,10 @@ with Deep Reinforcement Learning" (URL: https://ieeexplore.ieee.org/document/941
 doi: 10.1109/WCNC49053.2021.9417575.
 */
 
+/*
+This is code modified by Igor Siemek for ES project about using ML for wifi optimization.
+05.05.24r
+*/
 #include <chrono>
 #include <filesystem>
 #include <map>
@@ -134,6 +138,15 @@ class ConvergenceScenario : public Scenario
     void installScenario(double simulationTime, double envStepTime, ns3::Callback<void, Ptr<const Packet>> callback) override;
 };
 
+class HighDensityScenario : public Scenario
+{
+    using Scenario::Scenario;
+
+  public:
+    void installScenario(double simulationTime, double envStepTime, ns3::Callback<void, Ptr<const Packet>> callback) override;
+    void setupMobility();
+};
+
 class ScenarioFactory
 {
   private:
@@ -165,6 +178,10 @@ class ScenarioFactory
         else if (scenario == "convergence")
         {
             wifiScenario = new ConvergenceScenario(this->nWifim, this->wifiStaNode, this->wifiApNode, this->port, this->offeredLoad, this->history_length);
+        }//Adding new scenarios
+        else if(scenario == "highDensity")
+        {
+            wifiScenario = new HighDensityScenario(this->nWifim, this->wifiStaNode, this->wifiApNode, this->port, this->offeredLoad, this->history_length);
         }
         else
         {
@@ -255,16 +272,16 @@ void Scenario::PopulateARPcache()
     for (NodeList::Iterator i = NodeList::Begin(); i != NodeList::End(); ++i)
     {
         Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol>();
-        NS_ASSERT(ip != 0);
+        NS_ASSERT(ip != nullptr);
         ObjectVectorValue interfaces;
         ip->GetAttribute("InterfaceList", interfaces);
 
         for (ObjectVectorValue::Iterator j = interfaces.Begin(); j != interfaces.End(); j++)
         {
             Ptr<Ipv4Interface> ipIface = (*j).second->GetObject<Ipv4Interface>();
-            NS_ASSERT(ipIface != 0);
+            NS_ASSERT(ipIface != nullptr);
             Ptr<NetDevice> device = ipIface->GetDevice();
-            NS_ASSERT(device != 0);
+            NS_ASSERT(device != nullptr);
             Mac48Address addr = Mac48Address::ConvertFrom(device->GetAddress());
 
             for (uint32_t k = 0; k < ipIface->GetNAddresses(); k++)
@@ -286,7 +303,7 @@ void Scenario::PopulateARPcache()
     for (NodeList::Iterator i = NodeList::Begin(); i != NodeList::End(); ++i)
     {
         Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol>();
-        NS_ASSERT(ip != 0);
+        NS_ASSERT(ip != nullptr);
         ObjectVectorValue interfaces;
         ip->GetAttribute("InterfaceList", interfaces);
 
@@ -326,6 +343,42 @@ void ConvergenceScenario::installScenario(double simulationTime, double envStepT
         std::cout << "Not enough Wi-Fi stations to support the convergence scenario." << endl;
         exit(0);
     }
+}
+
+void HighDensityScenario::installScenario(double simulationTime, double envStepTime, ns3::Callback<void, Ptr<const Packet>> callback)
+{
+    setupMobility(); //start by setting up mobility
+
+    double startTime = 0.0;
+    double endTime =  simulationTime + 2 + envStepTime * history_length;
+
+
+    for (int i = 0; i < this->nWifim; ++i)
+    {
+        Ptr<UniformRandomVariable> randomStart = CreateObject<UniformRandomVariable>();
+        randomStart->SetAttribute("Min", DoubleValue(0.0));
+        randomStart->SetAttribute("Max", DoubleValue(1.0)); // Random start within the first second
+        startTime = randomStart->GetValue();
+
+        installTrafficGenerator(this->wifiStaNode.Get(i), this->wifiApNode.Get(0), this->port++, this->offeredLoad, startTime, endTime, callback);
+    }
+}
+
+//adding movment 
+void HighDensityScenario::setupMobility()
+{
+    MobilityHelper mobility;
+    mobility.SetPositionAllocator("ns3::RandomDiscPositionAllocator",
+                                "X", DoubleValue(100.0),
+                                "Y", DoubleValue(100.0),
+                                "Rho", StringValue("ns3::UniformRandomVariable[Min=0|Max=30]"));
+    mobility.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
+                            "Mode", StringValue("Time"),
+                            "Time", TimeValue(Seconds(2)), // Moves every 2 sec
+                            "Speed", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"), // 1 m/s speed
+                            "Bounds", RectangleValue(Rectangle(-50, 50, -50, 50)));
+
+    mobility.Install(wifiStaNode);
 }
 
 /***** Functions declarations *****/
@@ -479,7 +532,8 @@ main (int argc, char *argv[])
     set_nodes(channelWidth, guardInterval, rng, simSeed, wifiStaNode, wifiApNode, phy, mac, wifi, apDevice);
 
     ScenarioFactory helper = ScenarioFactory(nWifi, wifiStaNode, wifiApNode, port, offeredLoad, history_length);
-    wifiScenario = helper.getScenario(scenario);
+    //wifiScenario = helper.getScenario(scenario);
+    wifiScenario = helper.getScenario("highDensity"); //seelct new one
 
     // if (!dry_run)
     // {
@@ -706,7 +760,7 @@ ScheduleNextStateRead(double envStepTime)
         // Here is the ns3-ai communication with python agent
         // 1. push history and reward to DQN agent as observation
         auto env = m_env->EnvSetterCond();
-        for (int i = 0; i < history.size(); i++) {
+        for (size_t i = 0; i < history.size(); i++) {
             env->history[i] = history.at(i);
         }
         env->reward = reward;
