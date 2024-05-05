@@ -24,7 +24,7 @@ from reinforced_lib.logs import SourceType, TensorboardLogger
 # DRL settings, according to the cited article and its source code
 
 INTERACTION_PERIOD = 1e-2
-SIMULATION_TIME = 60
+SIMULATION_TIME = 5
 MAX_HISTORY_LENGTH = IEEE_802_11_CCOD.max_history_length
 HISTORY_LENGTH = 300
 THR_SCALE = 5 * 150 * INTERACTION_PERIOD * 10

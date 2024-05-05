@@ -5,8 +5,11 @@ if [[ $# -ne 4 ]]; then
   exit 1
 fi
 
-NS3_DIR="${NS3_DIR:=$HOME/ns-3.37}"
-RLIB_DIR="${RLIB_DIR:=$HOME/reinforced-lib/examples/ns-3-ccod}"
+#NS3_DIR="${NS3_DIR:=$HOME/ns-3-dev}"
+#RLIB_DIR="${RLIB_DIR:=$HOME/reinforced-lib/examples/ns-3-ccod}"
+
+NS3_DIR=$YOUR_NS3_PATH
+RLIB_DIR="${REINFORCED_LIB}/examples/ns-3-ccod"
 
 cd "$RLIB_DIR"
 
@@ -39,7 +42,10 @@ CHECKPOINT_LOAD_PATH="$RLIB_DIR/checkpoints/${AGENT}_${SCENARIO}_${N_WIFI}_run_$
 CHECKPOINT_SAVE_PATH="$RLIB_DIR/checkpoints/${AGENT}_${SCENARIO}_${N_WIFI}_test.pkl.lz4"
 LOAD_PATH="$CHECKPOINT_SAVE_PATH"
 
-python3 create_test_checkpoint.py --loadPath="$CHECKPOINT_LOAD_PATH" --savePath="$CHECKPOINT_SAVE_PATH" --agent="$AGENT"
+#python3 create_test_checkpoint.py --loadPath="$CHECKPOINT_LOAD_PATH" --savePath="$CHECKPOINT_SAVE_PATH" --agent="$AGENT"
+python3 $RLIB_DIR/examples/ns-3-ccod/main.py --ns3Path="$NS3_DIR" --agent="$AGENT" --agentType="$AGENT_TYPE" --nWifi="$N_WIFI" --scenario="$SCENARIO" --pythonSeed="$SEED" --seed="$SEED" --loadPath="$LOAD_PATH" --savePath="$SAVE_PATH" --mempoolKey="$MEMPOOL_KEY"
+
+
 
 for (( i = 1; i <= NUM_REPS; i += 1)); do
   CSV_PATH="$RLIB_DIR/outputs/${AGENT}_${SCENARIO}_${N_WIFI}_run${i}.csv"

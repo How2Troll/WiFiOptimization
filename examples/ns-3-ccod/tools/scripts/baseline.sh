@@ -5,7 +5,7 @@ if [[ $# -ne 3 ]]; then
   exit 1
 fi
 
-NS3_DIR="${NS3_DIR:=$HOME/ns-3.37}"
+NS3_DIR="${NS3_DIR:=$HOME/ns-3-dev}"
 RLIB_DIR="${RLIB_DIR:=$HOME/reinforced-lib/examples/ns-3-ccod}"
 
 cd "$NS3_DIR/build/scratch"
