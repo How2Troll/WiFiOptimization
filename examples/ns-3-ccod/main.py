@@ -10,6 +10,8 @@ from ctypes import *
 
 import jax.numpy as jnp
 import optax
+import matplotlib.pyplot as plt
+
 from chex import Array
 from flax import linen as nn
 
@@ -23,8 +25,8 @@ from reinforced_lib.logs import SourceType, TensorboardLogger
 
 # DRL settings, according to the cited article and its source code
 
-INTERACTION_PERIOD = 1e-2
-SIMULATION_TIME = 5
+INTERACTION_PERIOD = 1e-1  #1e-2  <- default
+SIMULATION_TIME = 1
 MAX_HISTORY_LENGTH = IEEE_802_11_CCOD.max_history_length
 HISTORY_LENGTH = 300
 THR_SCALE = 5 * 150 * INTERACTION_PERIOD * 10
@@ -81,7 +83,9 @@ def add_batch_dim(x: Array, base_ndims: int) -> Array:
 class DQNNetwork(nn.Module):
     @nn.compact
     def __call__(self, s: Array) -> Array:
+        #This is method for forward pass of NN
         s = add_batch_dim(s, base_ndims=2)
+        #here we add batch dim for input array 's' which represent status
         s = nn.RNN(nn.OptimizedLSTMCell(
             LSTM_HIDDEN_SIZE,
             activation_fn=nn.relu,
@@ -189,6 +193,7 @@ def run(
 
     try:
         ns3_process = exp.run(ns3_args, show_output=True)
+        rewards = [] #adding to see rewards 
         step = 0
 
         while not var.isFinish():
@@ -201,11 +206,17 @@ def run(
                     'reward': data.env.reward
                 }
                 data.act.action = rl.sample(**observation, is_training=rlib_args['is_training'])
+                rewards.append(observation['reward'])
 
                 csv_file.write(
                     f"{agent_type.__name__},{ns3_args['scenario']},{ns3_args['nWifi']},{ns3_args['RngRun']},"
                     f"{step * INTERACTION_PERIOD},{observation['reward'] * THR_SCALE}\n"
                 ) if csv_file else None
+
+                # Update the plot every 10 steps
+                if step % 10 == 0:
+                    update_plot(step, rewards)
+
                 step += 1
 
         ns3_process.wait()
@@ -215,6 +226,29 @@ def run(
 
     if rlib_args['is_training'] and rlib_args['save_path']:
         rl.save(agent_ids=0, path=rlib_args['save_path'])
+
+#Plot for pyViz
+
+# Initialize the plot
+fig, ax = plt.subplots()
+
+def update_plot(step, rewards):
+    """
+    Update the plot with new data.
+    
+    Args:
+        step (int): Current step of the simulation.
+        rewards (list): List of accumulated rewards.
+    """
+    ax.clear()  # Clear previous plot
+    ax.plot(rewards, label='Rewards')
+    ax.set_xlabel('Step')
+    ax.set_ylabel('Reward')
+    ax.legend()
+    plt.draw()
+    plt.pause(0.01)  # Pause briefly to update the plot
+
+plt.show(block=False)  # Show the plot without blocking the execution
 
 
 if __name__ == '__main__':

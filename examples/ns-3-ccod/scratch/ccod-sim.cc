@@ -632,6 +632,18 @@ execute_action(float action)
     }
     return true;
 }
+//adding power usage function
+
+float getPowerUsage(uint32_t packets, float txPower, float rxPower, float idlePower, float duration)
+{
+    float totalTxTime = packets * 0.001; //we assume taht 1 packets takes 1ms to transmit mighr need adjust
+    float totalRxTime = packets * 0.001 //same as upper but Rx
+    float idleTime = duration - totalRxTime - totalTxTime;
+    return (totalTxTime * txPower) + (totalRxTime * rxPower) + (idleTime * idlePower);
+}
+
+}
+
 
 float
 getReward(void)
@@ -642,7 +654,16 @@ getReward(void)
     ticks += envStepTime;
 
     float res = g_rxPktNum - last_packets;
-    float reward = res * (1500 - 20 - 8 - 8) * 8.0 / 1024 / 1024 / (5 * 150 * envStepTime) * 10;
+    //we change reward from throughput to throughput,power_eff
+    float powerUsage = getPowerUsage(res, 0.2, 0.1, 0.005, envStepTime);
+    // txPower, rxPower, idlePower all in watts
+    float powerPenalty = powerUsage * 0.1;
+    //now we need to adjust like hower power eff affects throughput
+
+    float throughputReward = res * (1500 - 20 - 8 - 8) * 8.0 / 1024 / 1024 / (5 * 150 * envStepTime) * 10;
+
+    // new reward adjusted for powerUsage
+    float reward = throughputReward - powerPenalty;
 
     last_packets = g_rxPktNum;
 
@@ -650,8 +671,7 @@ getReward(void)
         return 0.0;
 
     if (verbose)
-        NS_LOG_UNCOND("Reward: " << reward);
-
+        NS_LOG_UNCOND("Reward: " << reward << ", Throughput Reward: " << throughputReward << ", Power Penalty: " << powerPenalty);
     if(reward>1.0f || reward<0.0f)
         reward = last_reward;
     last_reward = reward;
