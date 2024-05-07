@@ -26,7 +26,7 @@ SCENARIO=$2
 N_WIFI=$3
 SEED=$4
 
-NUM_REPS=14
+NUM_REPS=50
 MEMPOOL_KEY=1234
 
 for (( i = 1; i <= NUM_REPS; i += 1 )); do

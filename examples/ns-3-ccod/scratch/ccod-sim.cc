@@ -67,6 +67,10 @@ This is code modified by Igor Siemek for ES project about using ML for wifi opti
 #include "ns3/yans-wifi-helper.h"
 #include "ns3/ns3-ai-module.h"
 
+//Adding some libs for power usage
+#include "ns3/basic-energy-source-helper.h"
+#include "ns3/wifi-radio-energy-model-helper.h"
+
 #define DEFAULT_MEMBLOCK_KEY 2333
 #define MAX_HISTORY_LENGTH 512
 
@@ -349,6 +353,20 @@ void HighDensityScenario::installScenario(double simulationTime, double envStepT
 {
     setupMobility(); //start by setting up mobility
 
+    //add Battery
+    BasicEnergySourceHelper basicSourceHelper;
+    basicSourceHelper.Set("BasicEnergySourceInitialEnergyJ", DoubleValue(100.0)); // 100 Joules
+
+    WifiRadioEnergyModelHelper radioEnergyHelper;
+
+    //we assume that:
+    //Tx takes most energy
+    //Rx takes half of it
+    //Standby takes 10% of Rx
+    radioEnergyHelper.Set("TxCurrentA", DoubleValue(0.02)); 
+    radioEnergyHelper.Set("RxCurrentA", DoubleValue(0.01));
+    radioEnergyHelper.Set("IdleCurrentA", DoubleValue(0.001)); 
+
     double startTime = 0.0;
     double endTime =  simulationTime + 2 + envStepTime * history_length;
 
@@ -359,6 +377,11 @@ void HighDensityScenario::installScenario(double simulationTime, double envStepT
         randomStart->SetAttribute("Min", DoubleValue(0.0));
         randomStart->SetAttribute("Max", DoubleValue(1.0)); // Random start within the first second
         startTime = randomStart->GetValue();
+
+        //installing energy 
+        Ptr<Node> node = this->wifiStaNode.Get(i);
+        EnergySourceContainer sources = basicSourceHelper.Install(node);
+        DeviceEnergyModelContainer deviceModels = radioEnergyHelper.Install(node->GetDevice(0), sources);
 
         installTrafficGenerator(this->wifiStaNode.Get(i), this->wifiApNode.Get(0), this->port++, this->offeredLoad, startTime, endTime, callback);
     }
@@ -637,11 +660,9 @@ execute_action(float action)
 float getPowerUsage(uint32_t packets, float txPower, float rxPower, float idlePower, float duration)
 {
     float totalTxTime = packets * 0.001; //we assume taht 1 packets takes 1ms to transmit mighr need adjust
-    float totalRxTime = packets * 0.001 //same as upper but Rx
+    float totalRxTime = packets * 0.001; //same as upper but Rx
     float idleTime = duration - totalRxTime - totalTxTime;
     return (totalTxTime * txPower) + (totalRxTime * rxPower) + (idleTime * idlePower);
-}
-
 }
 
 
