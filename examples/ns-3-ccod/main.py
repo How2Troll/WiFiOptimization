@@ -28,7 +28,7 @@ from reinforced_lib.logs import SourceType, TensorboardLogger
 INTERACTION_PERIOD = 1e-1  #1e-2  <- default
 SIMULATION_TIME = 1
 MAX_HISTORY_LENGTH = IEEE_802_11_CCOD.max_history_length
-HISTORY_LENGTH = 300
+HISTORY_LENGTH = 50
 THR_SCALE = 5 * 150 * INTERACTION_PERIOD * 10
 
 DQN_LEARNING_RATE = 4e-4

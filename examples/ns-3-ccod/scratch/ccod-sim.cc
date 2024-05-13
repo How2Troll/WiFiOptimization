@@ -364,9 +364,10 @@ void HighDensityScenario::installScenario(double simulationTime, double envStepT
     //Rx takes half of it
     //Standby takes 10% of Rx
     radioEnergyHelper.Set("TxCurrentA", DoubleValue(0.02)); 
-    radioEnergyHelper.Set("RxCurrentA", DoubleValue(0.01));
-    radioEnergyHelper.Set("IdleCurrentA", DoubleValue(0.001)); 
-
+    radioEnergyHelper.Set("RxCurrentA", DoubleValue(0.01)); //and how to simulate diffrent usage of power
+    radioEnergyHelper.Set("IdleCurrentA", DoubleValue(0.001)); //ask about this values
+    //teraz jedyna opcja to chyba? AI wylacza tranmist if warunki == bad
+    //parameters don't effect used power, just time
     double startTime = 0.0;
     double endTime =  simulationTime + 2 + envStepTime * history_length;
 
