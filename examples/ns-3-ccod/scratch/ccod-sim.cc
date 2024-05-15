@@ -78,6 +78,7 @@ using namespace std;
 using namespace ns3;
 
 bool dry_run = false;
+bool energy_managment = true;
 
 /***** ns3-ai structures *****/
 
@@ -420,6 +421,9 @@ void set_phy(int nWifi, NodeContainer &wifiStaNode, NodeContainer &wifiApNode, Y
 void set_sim(bool tracing, bool dry_run, int warmup, YansWifiPhyHelper phy, NetDeviceContainer apDevice, int end_delay, Ptr<FlowMonitor> &monitor, FlowMonitorHelper &flowmon);
 void signalHandler(int signum);
 
+float calculateTxPower(float action);
+float getPowerUsage(uint32_t packets, float txPower, float rxPower, float idlePower, float duration);
+
 /***** Global variables *****/
 
 double envStepTime = 0.1;
@@ -445,6 +449,10 @@ Scenario *wifiScenario;
 
 uint64_t g_rxPktNum = 0;
 uint64_t g_txPktNum = 0;
+
+float currentTxPower = 0.02;//this will be changed
+const float rxPower = 0.01;
+const float idlePower = 0.005;
 
 /***** Main with scenario definition *****/
 
@@ -581,6 +589,7 @@ main (int argc, char *argv[])
     double flowThr;
     float res =  g_rxPktNum * (1500 - 20 - 8 - 8) * 8.0 / 1024 / 1024;
     cout << endl << "Sent mbytes: " << res << "\tThroughput: " << res/simulationTime << endl;
+    cout << endl << "CurrentTxPower: " << currentTxPower << endl;
     ofstream myfile;
     myfile.open(outputCsv, ios::app);
 
@@ -591,11 +600,13 @@ main (int argc, char *argv[])
     std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats();
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin(); i != stats.end(); ++i)
     {
+        float duration = i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds();
+        float powerUsage = getPowerUsage(i->second.rxPackets, currentTxPower, rxPower, idlePower, duration);
         auto time = std::time(nullptr); //Get timestamp
         auto tm = *std::localtime(&time);
         Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(i->first);
         flowThr = i->second.rxBytes * 8.0 / simulationTime / 1000 / 1000;
-        cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\tThroughput: " << flowThr << " Mbps\tTime: " << i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds() << " s\tRx packets " << i->second.rxPackets << endl;
+        cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\tThroughput: " << flowThr << " Mbps\tTime: " << i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds() << " s\tRx packets " << i->second.rxPackets << "\tPower Usage: " << powerUsage << " W" << endl;
         myfile << std::put_time(&tm, "%Y-%m-%d %H:%M") << "," << CW << "," << nWifi << "," << RngSeedManager::GetRun() << "," << t.sourceAddress << "," << t.destinationAddress << "," << flowThr;
         myfile << std::endl;
     }
@@ -654,14 +665,39 @@ execute_action(float action)
         Config::Set("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCw", UintegerValue(CW));
         Config::Set("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCw", UintegerValue(CW));
     }
+    if(energy_managment)
+    {
+        currentTxPower = calculateTxPower(action);
+        Config::Set("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/TxPowerStart", DoubleValue(currentTxPower));
+        Config::Set("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/TxPowerEnd", DoubleValue(currentTxPower));
+
+    }
     return true;
 }
 //adding power usage function
 
+float calculateTxPower(float action)
+{
+    const float minTxPower=0.0;
+    const float maxTxPower=20.0;
+    const int numActions = 9;
+
+     // Ensure the action is within the valid range
+    if (action < 0 || action >= numActions) {
+        std::cerr << "Invalid action value: " << action << std::endl;
+        exit(1);
+    }
+
+    float stepSize = (maxTxPower - minTxPower) / (numActions - 1);
+    float txPower = minTxPower + action * stepSize;
+    return txPower;
+}
+
+
 float getPowerUsage(uint32_t packets, float txPower, float rxPower, float idlePower, float duration)
 {
-    float totalTxTime = packets * 0.001; //we assume taht 1 packets takes 1ms to transmit mighr need adjust
-    float totalRxTime = packets * 0.001; //same as upper but Rx
+    float totalTxTime = packets * 0.0001; //we assume taht 1 packets takes 1ms to transmit mighr need adjust
+    float totalRxTime = packets * 0.0001; //same as upper but Rx
     float idleTime = duration - totalRxTime - totalTxTime;
     return (totalTxTime * txPower) + (totalRxTime * rxPower) + (idleTime * idlePower);
 }
@@ -677,13 +713,14 @@ getReward(void)
 
     float res = g_rxPktNum - last_packets;
     //we change reward from throughput to throughput,power_eff
-    float powerUsage = getPowerUsage(res, 0.2, 0.1, 0.005, envStepTime);
+    float powerUsage = getPowerUsage(res, currentTxPower, rxPower, idlePower, envStepTime);
     // txPower, rxPower, idlePower all in watts
-    float powerPenalty = powerUsage * 0.1;
+    const float powerPenaltyPercentage = 0.1; // Example: 10% penalty
+
     //now we need to adjust like hower power eff affects throughput
 
     float throughputReward = res * (1500 - 20 - 8 - 8) * 8.0 / 1024 / 1024 / (5 * 150 * envStepTime) * 10;
-
+    float powerPenalty = throughputReward * powerPenaltyPercentage * powerUsage;
     // new reward adjusted for powerUsage
     float reward = throughputReward - powerPenalty;
 
